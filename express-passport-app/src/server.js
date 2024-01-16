@@ -2,25 +2,36 @@ const cookieSession = require('cookie-session')
 const express = require('express')
 const { default: mongoose} = require('mongoose')
 const passport = require('passport')
-const path = require('path')
-const User = require("./models/users.model")
 const app = express()
+const path = require('path')
 
-const cookieEncryptionKey = 'secret-key'
+const config = require('config')
+const mainRouter = require('./routes/main.router')
+const usersRouter = require('./routes/users.router')
+const serverConfig = config.get('server')
+
+const port = serverConfig.port
+
+require('dotenv').config()
 
 app.use(cookieSession({
-    keys: [cookieEncryptionKey]
+    name: 'cookie-session-name',
+    keys: [process.env.COOKIE_ENCRYPTION_KEY]
 }))
 
-// app.use(function (req, res, next) {
-//     if (req.session && !req.session.regenerate) {
-//         req.session.regenerate = (cb) => cb()
-//     }
-//
-//     if (req.session && !req.session.save) {
-//         req.session.save = (cb) => cb()
-//     }
-// })
+app.use(function (request, response, next) {
+    if (request.session && !request.session.regenerate) {
+        request.session.regenerate = (cb) => {
+            cb()
+        }
+    }
+    if (request.session && !request.session.save) {
+        request.session.save = (cb) => {
+            cb()
+        }
+    }
+    next()
+})
 
 app.use(passport.initialize())
 app.use(passport.session())
@@ -34,58 +45,19 @@ app.set('views', path.join(__dirname, 'views'))
 app.set('view engine', 'ejs')
 
 mongoose.set('strictQuery', false)
-mongoose.connect(`mongodb+srv://<user>:<password>@freeapp.vl7ilvo.mongodb.net/`)
+mongoose.connect(process.env.MONGO_URI)
     .then(() => {
         console.log('mongodb connected')
     })
     .catch((err) => {
         console.log(err)
     })
-app.use('/static', express.static(path.join(__dirname, 'public')))
 
-app.get('/', (req, res) => {
-    res.render('index')
-})
-app.get('/login', (req, res) => {
-    res.render('login')
-})
-app.post('/login', (req, res, next) => {
-    passport.authenticate('local', (err, user, info) => {
-       if (err) {
-           return next(err)
-       }
+app.use('/static', express.static(path.join(__dirname, '../public')))
 
-       if (!user) {
-           console.log('user not found')
-           return res.json({ msg: info })
-       }
+app.use('/', mainRouter)
+app.use('/auth', usersRouter)
 
-       req.logIn(user, function (err) {
-           if (err) { return next(err) }
-           res.redirect('/')
-       })
-   }) (req, res, next)
-})
-
-app.get('/signup', (req, res) => {
-    res.render('signup')
-})
-app.post('/signup', async (req, res) => {
-    // user 객체 생성
-    const user = new User(req.body)
-
-    try {
-        // user 컬렉션에 유저를 저장
-        await user.save()
-        return res.status(200).json({
-            success: true
-        })
-    } catch (error) {
-        console.log(error)
-    }
-})
-
-const port = 4000;
 app.listen(port, () => {
     console.log(`Listening on ${port}`)
 })
